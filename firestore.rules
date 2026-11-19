@@ -1,0 +1,186 @@
+rules_version = '2';
+
+// Juicysukun Café — Firestore security rules.
+//
+// Who can do what:
+//   Everyone (including anonymous customers)  read the menu, shop status and public config.
+//   The owner (custom claim admin == true)    edit menu, shop status, config, device tokens, blocked numbers; read all orders.
+//   Customers                                 read ONLY their own order (by id).
+//   Nobody from a client                      creates or changes orders. Cloud Functions do that, so prices cannot be faked.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function validSize(s) {
+      return s is map
+        && s.keys().hasOnly(['label', 'price'])
+        && s.label is string && s.label.size() <= 20
+        && s.price is number && s.price > 0 && s.price <= 100000;
+    }
+
+    function validAddon(a) {
+      return a is map
+        && a.keys().hasOnly(['label', 'price'])
+        && a.label is string && a.label.size() > 0 && a.label.size() <= 30
+        && a.price is number && a.price >= 0 && a.price <= 100000;
+    }
+
+    function sizeOk(d, i) { return d.sizes.size() <= i || validSize(d.sizes[i]); }
+    function addonOk(d, i) { return d.addons.size() <= i || validAddon(d.addons[i]); }
+    function optionOk(d, i) { return d.options.size() <= i || (d.options[i] is string && d.options[i].size() > 0 && d.options[i].size() <= 30); }
+
+    function validMenuItem(d) {
+      return d.keys().hasAll(['name', 'category', 'sizes', 'available', 'sort'])
+        && d.keys().hasOnly(['name', 'category', 'sizes', 'available', 'sort', 'special', 'imageUrl', 'addons', 'options', 'allowNote', 'veg'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.category is string && d.category.size() > 0 && d.category.size() <= 40
+        && d.sizes is list && d.sizes.size() >= 1 && d.sizes.size() <= 4
+        && validSize(d.sizes[0]) && sizeOk(d, 1) && sizeOk(d, 2) && sizeOk(d, 3)
+        && (!('addons' in d) || (d.addons is list && d.addons.size() <= 8
+            && addonOk(d, 0) && addonOk(d, 1) && addonOk(d, 2) && addonOk(d, 3)
+            && addonOk(d, 4) && addonOk(d, 5) && addonOk(d, 6) && addonOk(d, 7)))
+        && (!('options' in d) || (d.options is list && d.options.size() <= 8
+            && optionOk(d, 0) && optionOk(d, 1) && optionOk(d, 2) && optionOk(d, 3)
+            && optionOk(d, 4) && optionOk(d, 5) && optionOk(d, 6) && optionOk(d, 7)))
+        && (!('allowNote' in d) || d.allowNote is bool)
+        && (!('veg' in d) || d.veg == null || d.veg is bool)
+        && d.available is bool
+        && d.sort is number
+        && (!('special' in d) || d.special is bool)
+        && (!('imageUrl' in d) || d.imageUrl == null || d.imageUrl is string);
+    }
+
+    function validShop(d) {
+      return d.keys().hasAll(['open'])
+        && d.keys().hasOnly(['open', 'message', 'updatedAt'])
+        && d.open is bool
+        && (!('message' in d) || d.message is string)
+        && (!('updatedAt' in d) || d.updatedAt is number);
+    }
+
+    function validPublicConfig(d) {
+      return d.keys().hasOnly(['cafeName', 'freeDeliveryMin', 'deliveryFee', 'maxLines', 'maxQtyPerLine', 'tableCount',
+                               'upiEnabled', 'upiId', 'upiName', 'loyaltyEnabled', 'loyaltyAfter', 'loyaltyPercent',
+                               'upiPaise', 'busyMode', 'busyExtraMin', 'deliveryMaxKm', 'cafeLat', 'cafeLng'])
+        && (!('deliveryMaxKm' in d) || (d.deliveryMaxKm is number && d.deliveryMaxKm >= 0 && d.deliveryMaxKm <= 500))
+        && (!('cafeLat' in d) || (d.cafeLat is number && d.cafeLat >= -90 && d.cafeLat <= 90))
+        && (!('cafeLng' in d) || (d.cafeLng is number && d.cafeLng >= -180 && d.cafeLng <= 180))
+        && (!('upiPaise' in d) || d.upiPaise is bool)
+        && (!('busyMode' in d) || d.busyMode is bool)
+        && (!('busyExtraMin' in d) || (d.busyExtraMin is number && d.busyExtraMin >= 0 && d.busyExtraMin <= 120))
+        && d.tableCount is number && d.tableCount >= 1 && d.tableCount <= 100
+        && d.upiEnabled is bool && d.upiId is string && d.upiId.size() <= 60 && d.upiName is string && d.upiName.size() <= 40
+        && d.loyaltyEnabled is bool
+        && d.loyaltyAfter is number && d.loyaltyAfter >= 1 && d.loyaltyAfter <= 100
+        && d.loyaltyPercent is number && d.loyaltyPercent >= 0 && d.loyaltyPercent <= 50
+        && d.cafeName is string && d.cafeName.size() > 0 && d.cafeName.size() <= 60
+        && d.freeDeliveryMin is number && d.freeDeliveryMin >= 0 && d.freeDeliveryMin <= 100000
+        && d.deliveryFee is number && d.deliveryFee >= 0 && d.deliveryFee <= 1000
+        && d.maxLines is number && d.maxLines >= 1 && d.maxLines <= 100
+        && d.maxQtyPerLine is number && d.maxQtyPerLine >= 1 && d.maxQtyPerLine <= 100;
+    }
+
+    function validPrivateConfig(d) {
+      return d.keys().hasOnly(['cafePhone', 'cafeAddress', 'fssai', 'orderTimeoutMinutes'])
+        && d.cafePhone is string && d.cafePhone.size() <= 20
+        && d.cafeAddress is string && d.cafeAddress.size() <= 250
+        && d.fssai is string && d.fssai.size() <= 30
+        && d.orderTimeoutMinutes is number && d.orderTimeoutMinutes >= 1 && d.orderTimeoutMinutes <= 60;
+    }
+
+    match /shop/{doc} {
+      allow read: if true;
+      allow create, update: if isAdmin() && validShop(request.resource.data);
+    }
+
+    match /config/public {
+      allow read: if true;
+      allow create, update: if isAdmin() && validPublicConfig(request.resource.data);
+    }
+
+    match /config/private {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && validPrivateConfig(request.resource.data);
+    }
+
+    match /menu/{itemId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && validMenuItem(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get: if request.auth != null
+        && (isAdmin() || resource.data.customerUid == request.auth.uid);
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // Owner phones that should be alerted about new orders (document id = FCM token).
+    match /adminTokens/{token} {
+      allow read, write: if isAdmin();
+    }
+
+    // Phone numbers the owner has blocked (document id = 10-digit number).
+    match /blockedPhones/{phone} {
+      allow read, write: if isAdmin();
+    }
+
+    // Banners shown to customers. Everyone reads; only the owner edits.
+    function validOffer(d) {
+      return d.keys().hasAll(['title', 'start', 'end', 'active', 'sort'])
+        && d.keys().hasOnly(['title', 'text', 'imageUrl', 'link', 'sponsored', 'start', 'end', 'active', 'sort'])
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 80
+        && (!('text' in d) || (d.text is string && d.text.size() <= 200))
+        && (!('imageUrl' in d) || d.imageUrl == null || d.imageUrl is string)
+        && (!('link' in d) || (d.link is string && d.link.size() <= 300))
+        && (!('sponsored' in d) || d.sponsored is bool)
+        && d.start is number && d.end is number && d.active is bool && d.sort is number;
+    }
+    match /offers/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && validOffer(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Reviews shown on the menu: anyone reads the public ones; only the owner changes them (the Worker writes new ones).
+    match /reviews/{id} {
+      allow read: if resource.data.public == true || isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name', 'rating', 'comment', 'at', 'public'])
+        && request.resource.data.public is bool;
+      allow delete: if isAdmin();
+    }
+
+    // Owner's expenses (ledger).
+    match /expenses/{id} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasAll(['day', 'category', 'amount', 'at'])
+        && request.resource.data.keys().hasOnly(['day', 'category', 'amount', 'note', 'at'])
+        && request.resource.data.day is string && request.resource.data.day.size() == 10
+        && request.resource.data.category is string && request.resource.data.category.size() <= 40
+        && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
+        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 120))
+        && request.resource.data.at is number;
+    }
+
+    // Regular customers and per-day visit counters: written only by the Worker, read only by the owner.
+    match /customers/{phone} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /daily/{day} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Order counter etc. Only Cloud Functions (admin SDK) touch this.
+    match /meta/{doc} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,17 @@
+name = "juicysukun-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[placement]
+mode = "smart"
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+FIREBASE_PROJECT_ID = "juicy-sukun"
+ALLOWED_ORIGIN = "https://juicy-sukun.web.app"
+
+[[kv_namespaces]]
+binding = "IMAGES"
+id = "142a786a0fff4045abbb5ed473a270a2"

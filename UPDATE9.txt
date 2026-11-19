@@ -1,0 +1,28 @@
+JUICYSUKUN update9 (cumulative on top of update8)
+
+Extract this zip INTO your project folder (C:\Users\NADIM\Downloads\juicysukun) and choose "Replace files".
+
+Then, in Command Prompt, from the project folder:
+
+ 1) Rules (new config fields):
+      npx firebase deploy --only firestore:rules
+ 2) Worker (Insights fix, ready time, all reviews shown):
+      cd worker
+      npx wrangler deploy
+      cd ..
+ 3) Customer site:
+      npm run build:customer
+      npx firebase deploy --only hosting
+ 4) Owner app (APK):
+      set JAVA_HOME=C:\Program Files\Java\jdk-24
+      set ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk
+      set PATH=%JAVA_HOME%\bin;%PATH%
+      npm run apk
+
+Then open Books > Reviews once in the owner app (publishes your old reviews).
+
+NEW IN THIS VERSION
+ - Menu has no "All" chip: the first category opens; search still looks everywhere.
+ - Delivery distance limit: Settings > Delivery & tables > "Deliver only within (km)".
+   Enter the cafe location (latitude, longitude) or tap "Use my current location".
+   Customers must share their location for delivery; farther orders are refused. Dine-in is never limited.

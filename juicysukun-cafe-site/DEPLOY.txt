@@ -1,0 +1,17 @@
+JUICYSUKUN CAFE WEBSITE - HOW TO PUBLISH (Windows, Command Prompt)
+
+This is a separate website. Your ordering app (juicy-sukun.web.app) is NOT touched.
+
+1. Unzip this folder to C:\juicysukun-site
+2. Open Command Prompt and run:
+     cd C:\juicysukun-site
+3. Create the new site (one time only):
+     npx firebase hosting:sites:create juicysukun-cafe --project juicy-sukun
+   If the name is taken, pick another (for example juicysukun-akkalkot) and change
+   "site" in firebase.json to the same name.
+4. Publish:
+     npx firebase deploy --only hosting --project juicy-sukun
+5. Open https://juicysukun-cafe.web.app and check it on your phone.
+6. Put that address in the Google Business Profile: Edit profile > Contact > Website.
+
+TO CHANGE ANYTHING LATER: edit public\index.html (phone, hours, photos in public\images) and run step 4 again.
